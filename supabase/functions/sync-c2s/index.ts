@@ -123,7 +123,7 @@ function transformItem(item: Record<string, any>) {
     corretor:            seller.name ?? null,
     status_atual:        a.lead_status?.name ?? funnelToStatus(funnel_status_atual),
     funnel_status_atual,
-    tags:                Array.isArray(a.tags) ? a.tags.map((t: any) => t.name || t).filter(Boolean) : [],
+    tags:                Array.isArray(a.tags) ? a.tags.map((t: any) => (t.tag_name || t.name || t)?.trim?.() || t).filter(Boolean) : [],
     valor_potencial:     parseCurrency(a.product?.price_float),
     done_deal_at:        parseDate(a.done_deal_at),
     valor_venda:         parseCurrency(a.done_details?.done_price),

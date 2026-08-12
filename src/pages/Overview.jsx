@@ -5,6 +5,7 @@ import { FunnelChart } from '../components/charts/FunnelChart'
 import { useKPIs, useLeads, useVendas, useMetas } from '../hooks/useMetrics'
 import { useFilters } from '../hooks/useFilters'
 import { formatBRL, formatNumber, formatPct, formatDays } from '../lib/formatters'
+import { hasTagPotencial, effectiveStage } from '../lib/funnel'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
   LineChart, Line, PieChart, Pie, Legend,
@@ -14,6 +15,7 @@ import styles from './Overview.module.css'
 
 const PIPELINE_STAGES = [
   { key: 'in_attendance',   label: 'Atendimento' },
+  { key: 'potencial',       label: 'Potencial' },
   { key: 'scheduled_visit', label: 'V. Agendada' },
   { key: 'done_visit',      label: 'V. Realizada' },
   { key: 'created_offer',   label: 'Proposta' },
@@ -26,15 +28,18 @@ export function Overview() {
   const { metas }                = useMetas()
   const { addCrossFilter }       = useFilters()
 
-  // Pipeline ativo (excluindo converted e lost)
+  // Pipeline ativo (excluindo converted e lost) — usa a mesma etapa "efetiva"
+  // do Funil Geral (Em Atendimento + tag Potencial vira etapa própria) pra
+  // não mostrar números diferentes entre os dois painéis.
   const pipeline = useMemo(() => {
-    return PIPELINE_STAGES.map(s => ({
-      ...s,
-      count: leads.filter(l => l.funnel_status_atual === s.key).length,
-      valor: leads
-        .filter(l => l.funnel_status_atual === s.key)
-        .reduce((sum, l) => sum + (l.valor_potencial || 0), 0),
-    }))
+    return PIPELINE_STAGES.map(s => {
+      const leadsDaEtapa = leads.filter(l => effectiveStage(l) === s.key)
+      return {
+        ...s,
+        count: leadsDaEtapa.length,
+        valor: leadsDaEtapa.reduce((sum, l) => sum + (l.valor_potencial || 0), 0),
+      }
+    })
   }, [leads])
 
   // Indicações
@@ -51,6 +56,22 @@ export function Overview() {
       compradores_total,
     }
   }, [vendas, metas])
+
+  // Etiqueta "Potencial" (C2S) — leads que já passaram por essa etiqueta,
+  // em qualquer etapa atual, e o que aconteceu com eles depois
+  const potencialStats = useMemo(() => {
+    const potenciais   = leads.filter(hasTagPotencial)
+    const convertidos  = potenciais.filter(l => l.funnel_status_atual === 'converted').length
+    const perdidos     = potenciais.filter(l => l.funnel_status_atual === 'lost').length
+    const emAndamento  = potenciais.length - convertidos - perdidos
+    return {
+      total: potenciais.length,
+      convertidos,
+      perdidos,
+      emAndamento,
+      taxaConv: potenciais.length > 0 ? convertidos / potenciais.length : null,
+    }
+  }, [leads])
 
   // Recuperação de arquivados
   const recuperacaoStats = useMemo(() => {
@@ -88,18 +109,21 @@ export function Overview() {
         <KPICard title="TAXA CONVERSÃO" value={kpis ? formatPct(kpis.taxaConversao) : null}   loading={loading} />
       </div>
 
-      <div className="tile-grid-5" style={{ marginTop: 'var(--gap)' }}>
+      <div className="tile-grid-4" style={{ marginTop: 'var(--gap)' }}>
         <KPICard title="CPL"          value={kpis ? formatBRL(kpis.cpl) : null}          loading={loading} />
         <KPICard title="CAC"          value={kpis ? formatBRL(kpis.cac) : null}          loading={loading} />
-        <KPICard title="ROAS"         value={kpis?.roas != null ? `${kpis.roas.toFixed(2)}×` : '—'}         loading={loading} />
         <KPICard
-          title="ROI"
-          value={kpis ? (kpis.temCustos ? formatPct(kpis.roi) : '—') : null}
+          title="ROAS"
+          value={kpis?.roas != null ? `${kpis.roas.toFixed(2)}×` : '—'}
           loading={loading}
-          tooltip={kpis && !kpis.temCustos ? 'Cadastre custos no Admin para calcular o ROI' : null}
+          tooltip="Calculado sobre a comissão real da Altezza (5% da receita/VGV), não sobre a VGV bruta"
         />
         <KPICard title="TICKET MÉDIO" value={kpis ? formatBRL(kpis.ticketMedio) : null}  loading={loading} />
       </div>
+      {/* ROI fica oculto até os custos reais da empresa (aluguel, folha etc) serem
+          cadastrados no Admin — sem eles o cálculo fica distorcido. Reative trocando
+          esta linha pelo bloco de KPICard ROI (ver histórico do arquivo) quando os
+          custos estiverem configurados. */}
 
       {/* Funil + Pipeline */}
       <div className="tile-grid-2" style={{ marginTop: 'var(--gap)' }}>
@@ -119,6 +143,49 @@ export function Overview() {
                 <div className={styles.pipelineValor}>{formatBRL(s.valor)}</div>
               </div>
             ))}
+          </div>
+        </Tile>
+      </div>
+
+      {/* Etiqueta Potencial (C2S) */}
+      <div className="tile-grid-4" style={{ marginTop: 'var(--gap)' }}>
+        <Tile
+          title="ETIQUETA POTENCIAL"
+          subtitle="leads que já tiveram essa etiqueta no C2S, em qualquer etapa"
+          span={4}
+          onClick={() => addCrossFilter('status', 'potencial')}
+        >
+          <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', paddingTop: 8 }}>
+            <div>
+              <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--gold)' }}>
+                {formatNumber(potencialStats.total)}
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>total marcados</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--positive)' }}>
+                {formatNumber(potencialStats.convertidos)}
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>fecharam negócio</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary)' }}>
+                {formatNumber(potencialStats.emAndamento)}
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>ainda em andamento</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--negative)' }}>
+                {formatNumber(potencialStats.perdidos)}
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>arquivados/perdidos</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary)' }}>
+                {formatPct(potencialStats.taxaConv)}
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>taxa de conversão</div>
+            </div>
           </div>
         </Tile>
       </div>

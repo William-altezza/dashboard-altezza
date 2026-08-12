@@ -1,20 +1,14 @@
 import { theme } from '../../styles/theme'
-
-const FUNNEL_STAGES = [
-  { key: 'new',             label: 'Novo Lead' },
-  { key: 'in_attendance',   label: 'Em Atendimento' },
-  { key: 'scheduled_visit', label: 'Visita Agendada' },
-  { key: 'done_visit',      label: 'Visita Realizada' },
-  { key: 'created_offer',   label: 'Proposta' },
-  { key: 'converted',       label: 'Fechado' },
-]
+import { FUNNEL_STAGES, effectiveStage } from '../../lib/funnel'
 
 export function FunnelChart({ leads, onStageClick }) {
   if (!leads || leads.length === 0) return <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Sem dados</div>
 
   const counts = {}
-  for (const stage of FUNNEL_STAGES) {
-    counts[stage.key] = leads.filter(l => l.funnel_status_atual === stage.key).length
+  for (const stage of FUNNEL_STAGES) counts[stage.key] = 0
+  for (const l of leads) {
+    const stage = effectiveStage(l)
+    if (counts[stage] !== undefined) counts[stage]++
   }
 
   const maxCount = Math.max(...Object.values(counts), 1)

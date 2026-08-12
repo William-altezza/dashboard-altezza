@@ -1,0 +1,41 @@
+// ────────────────────────────────────────────────────────────
+// Etapas do funil exibidas no dashboard.
+//
+// "Potencial" não é um funnel_status_atual real do C2S — é uma
+// etiqueta (tag) que os corretores aplicam a leads que ainda estão
+// "Em Atendimento" mas já demonstraram interesse forte. Pedido do
+// Eduardo: mostrar como uma etapa própria do funil, entre
+// "Em Atendimento" e "Visita Agendada".
+//
+// Leads que já avançaram para Visita Agendada/Realizada/Proposta/
+// Fechado NÃO "voltam" para a etapa Potencial na visualização —
+// eles continuam na etapa real deles, mesmo que também tenham a tag
+// (o que é o comportamento normal: a tag costuma ficar no lead à
+// medida que ele avança). Isso evita contar o mesmo lead 2x no funil.
+// ────────────────────────────────────────────────────────────
+
+export const FUNNEL_STAGES = [
+  { key: 'new',             label: 'Novo Lead' },
+  { key: 'in_attendance',   label: 'Em Atendimento' },
+  { key: 'potencial',       label: 'Potencial' },
+  { key: 'scheduled_visit', label: 'Visita Agendada' },
+  { key: 'done_visit',      label: 'Visita Realizada' },
+  { key: 'created_offer',   label: 'Proposta' },
+  { key: 'converted',       label: 'Fechado' },
+]
+
+function normalizeTag(t) {
+  return (t || '').trim().toLowerCase()
+}
+
+export function hasTagPotencial(lead) {
+  return (lead?.tags || []).some(t => normalizeTag(t) === 'potencial')
+}
+
+// Etapa "efetiva" de um lead para fins de visualização do funil.
+export function effectiveStage(lead) {
+  if (lead.funnel_status_atual === 'in_attendance' && hasTagPotencial(lead)) {
+    return 'potencial'
+  }
+  return lead.funnel_status_atual
+}

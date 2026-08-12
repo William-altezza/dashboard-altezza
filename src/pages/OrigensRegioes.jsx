@@ -8,6 +8,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts'
 import { theme } from '../styles/theme'
+import { COMISSAO_PCT } from '../lib/constants'
 import styles from './OrigensRegioes.module.css'
 
 const ORIGENS_PAGAS = ['Instagram Leads','Facebook Leads','CTWA Facebook - Anúncios',
@@ -42,7 +43,8 @@ function buildOrigemStats(leads, vendas, investTotal) {
       taxaConv: o.leads > 0 ? o.vendas / o.leads : null,
       cpl: o.leads > 0 ? investDir / o.leads : null,
       cac: o.vendas > 0 ? investDir / o.vendas : null,
-      roas: isPaga && investDir > 0 ? o.receita / investDir : null,
+      // Comissão real da Altezza (5% da receita/VGV), não a VGV bruta
+      roas: isPaga && investDir > 0 ? (o.receita * COMISSAO_PCT) / investDir : null,
       ticketMedio: o.vendas > 0 ? o.receita / o.vendas : null,
       tempoMedio,
       investDir,

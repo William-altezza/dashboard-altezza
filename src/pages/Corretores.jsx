@@ -6,9 +6,10 @@ import { formatBRL, formatNumber, formatPct, formatDays } from '../lib/formatter
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { theme } from '../styles/theme'
 import { FunnelChart } from '../components/charts/FunnelChart'
+import { effectiveStage } from '../lib/funnel'
 import styles from './Corretores.module.css'
 
-const FUNNEL_STAGES = ['new','in_attendance','scheduled_visit','done_visit','created_offer','converted','lost']
+const FUNNEL_STAGES = ['new','in_attendance','potencial','scheduled_visit','done_visit','created_offer','converted','lost']
 
 function calcCorretorStats(corretor, leads, vendas, cplGeral) {
   const myLeads  = leads.filter(l => l.corretor === corretor)
@@ -23,8 +24,10 @@ function calcCorretorStats(corretor, leads, vendas, cplGeral) {
     .reduce((s, l) => s + (l.valor_potencial || 0), 0)
 
   const porEtapa = {}
-  for (const s of FUNNEL_STAGES) {
-    porEtapa[s] = myLeads.filter(l => l.funnel_status_atual === s).length
+  for (const s of FUNNEL_STAGES) porEtapa[s] = 0
+  for (const l of myLeads) {
+    const stage = l.funnel_status_atual === 'lost' ? 'lost' : effectiveStage(l)
+    if (porEtapa[stage] !== undefined) porEtapa[stage]++
   }
 
   return {

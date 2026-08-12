@@ -143,7 +143,7 @@ function transformLead(item) {
     corretor:             seller.name || null,
     status_atual:         a.lead_status?.name || funnelToStatus(funnel_status_atual),
     funnel_status_atual,
-    tags:                 Array.isArray(a.tags) ? a.tags.map(t => t.name || t).filter(Boolean) : [],
+    tags:                 Array.isArray(a.tags) ? a.tags.map(t => (t.tag_name || t.name || t)?.trim?.() || t).filter(Boolean) : [],
     valor_potencial:      parseCurrency(product.price_float || product.price),
     done_deal_at:         done_deal_at?.toISOString() ?? null,
     valor_venda:          parseCurrency(doneObj.done_price),

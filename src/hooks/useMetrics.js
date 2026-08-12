@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { useFilters } from './useFilters'
+import { COMISSAO_PCT } from '../lib/constants'
 
 // Brazil is always UTC-3 (no DST since 2019).
 // Using timezone-aware timestamps ensures Postgres compares correctly
@@ -54,6 +55,15 @@ export function useLeads() {
     if (crossFilters.origem)   q = q.eq('origem', crossFilters.origem)
     if (crossFilters.regiao)   q = q.eq('regiao', crossFilters.regiao)
     if (crossFilters.pais)     q = q.eq('pais_iso', crossFilters.pais)
+    if (crossFilters.status) {
+      // "potencial" não é um funnel_status_atual real — é a etapa
+      // visual (Em Atendimento + etiqueta "Potencial" do C2S).
+      if (crossFilters.status === 'potencial') {
+        q = q.eq('funnel_status_atual', 'in_attendance').contains('tags', ['Potencial'])
+      } else {
+        q = q.eq('funnel_status_atual', crossFilters.status)
+      }
+    }
 
     q.then(({ data, error: err }) => {
       if (err) { setError(err.message); setLoading(false); return }
@@ -106,14 +116,17 @@ export function useInvestimentos() {
   useEffect(() => {
     if (!dateRange?.[0] || !dateRange?.[1]) return
 
-    const sinceMonth = isoDate(new Date(dateRange[0].getFullYear(), dateRange[0].getMonth(), 1))
-    const untilMonth = isoDate(new Date(dateRange[1].getFullYear(), dateRange[1].getMonth() + 1, 0))
+    // Usa o intervalo de datas EXATO selecionado (não expande para o mês
+    // inteiro) — a view investimento_por_dia tem granularidade diária,
+    // então filtrar 1 dia específico retorna só o gasto daquele dia.
+    const since = isoDate(dateRange[0])
+    const until = isoDate(dateRange[1])
 
     supabase
-      .from('investimento_por_mes')
+      .from('investimento_por_dia')
       .select('*')
-      .gte('mes', sinceMonth)
-      .lte('mes', untilMonth)
+      .gte('dia', since)
+      .lte('dia', until)
       .then(({ data }) => {
         setInvestimentos(data || [])
         setLoading(false)
@@ -206,9 +219,14 @@ export function useKPIs() {
       investimento: investTotal,
       cpl:          totalLeads > 0 ? investTotal / totalLeads : null,
       cac:          totalVendas > 0 ? investTotal / totalVendas : null,
-      roas:         investTotal > 0 ? receitaPaga / investTotal : null,
+      // ROAS calculado sobre a comissão real da Altezza (5% da VGV), não a VGV bruta —
+      // reflete o retorno real em dinheiro que entra pra empresa por real investido em ads.
+      roas:         investTotal > 0 ? (receitaPaga * COMISSAO_PCT) / investTotal : null,
       roi:          custoTotal > 0 ? (receita - custoTotal) / custoTotal : null,
-      temCustos:    custoTotal > 0,
+      // Só considera "com custos" quando há custos reais da empresa cadastrados no
+      // Admin (aluguel, salários etc) — investimento em ads sozinho não conta,
+      // senão o ROI fica distorcido (custoTotal nunca seria zero).
+      temCustos:    custos.length > 0,
       ticketMedio:  totalVendas > 0 ? receita / totalVendas : null,
       taxaConversao:totalLeads > 0 ? totalVendas / totalLeads : null,
       tempoMedioConversao,
