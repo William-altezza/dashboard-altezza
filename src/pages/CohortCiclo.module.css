@@ -1,0 +1,124 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+.cohortWrap {
+  overflow: auto;
+  max-height: 380px;
+}
+
+.cohortTable {
+  border-collapse: collapse;
+  font-size: 11px;
+  min-width: 100%;
+}
+
+.cohortTable th {
+  padding: 5px 10px;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  text-align: center;
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.cornerCell {
+  text-align: left !important;
+  min-width: 140px;
+}
+
+.cohortTable td {
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: center;
+  min-width: 52px;
+}
+
+.rowHeader {
+  text-align: left !important;
+  font-weight: 600;
+  color: var(--text-secondary);
+  position: sticky;
+  left: 0;
+  background: var(--surface);
+  z-index: 1;
+}
+
+.cell {
+  border-radius: var(--radius-sm);
+  transition: opacity 0.1s;
+}
+
+.cell:hover { opacity: 0.85; }
+
+.openCell {
+  color: var(--info);
+  font-weight: 600;
+}
+
+.totalRow td {
+  font-weight: 700;
+  color: var(--text-primary);
+  border-top: 2px solid var(--border);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+/* Velocidade */
+.velocidades {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.velRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  gap: 4px 12px;
+  align-items: center;
+}
+
+.velStages {
+  font-size: 11px;
+  color: var(--text-secondary);
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.velFrom { color: var(--text-muted); }
+.velArrow { color: var(--gold-dim); }
+.velTo { color: var(--text-primary); font-weight: 500; }
+
+.velValue {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--gold);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.velCount {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 400;
+  margin-left: 4px;
+}
+
+.velBar {
+  grid-column: 1 / -1;
+  height: 3px;
+  background: var(--surface-hover);
+  border-radius: 2px;
+  overflow: hidden;
+}

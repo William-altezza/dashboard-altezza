@@ -1,0 +1,7 @@
+node_modules
+.env
+.env.local
+scripts/
+supabase/
+.full-load-progress.json
+PROMPT_MESTRE_DASHBOARD_ALTEZZA.md

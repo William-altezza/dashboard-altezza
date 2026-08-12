@@ -1,0 +1,24 @@
+# Dependências
+node_modules/
+
+# Ambiente
+.env
+.env.local
+.env.*.local
+
+# Progresso de full load (pode conter tokens indiretamente)
+.full-load-progress.json
+
+# Build
+dist/
+
+# Editor / OS
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Supabase
+supabase/.branches/
+supabase/.temp/
+.vercel

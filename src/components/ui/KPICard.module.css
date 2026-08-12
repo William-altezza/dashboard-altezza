@@ -1,0 +1,37 @@
+.value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--gold);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  cursor: default;
+}
+
+.prefix, .suffix {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  vertical-align: super;
+}
+
+.variation {
+  font-size: 11px;
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+.positive { color: var(--positive); }
+.negative { color: var(--negative); }
+
+.skeleton {
+  height: 36px;
+  background: linear-gradient(90deg, var(--surface-hover) 25%, var(--border) 50%, var(--surface-hover) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: var(--radius-sm);
+}
+
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}

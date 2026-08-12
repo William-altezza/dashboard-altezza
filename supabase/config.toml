@@ -1,0 +1,11 @@
+# Supabase project config
+# project_id será preenchido com o ID do seu projeto no dashboard
+
+[project]
+id = "SEU_PROJECT_ID"
+
+[functions.sync-c2s]
+enabled = true
+
+[functions.sync-meta]
+enabled = true

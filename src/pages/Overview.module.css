@@ -1,0 +1,84 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+.error {
+  color: var(--negative);
+  padding: 16px;
+  background: rgba(248,113,113,0.08);
+  border-radius: var(--radius);
+  border: 1px solid var(--negative);
+}
+
+.pipeline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pipelineRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background 0.1s;
+  border-radius: var(--radius-sm);
+}
+
+.pipelineRow:last-child {
+  border-bottom: none;
+}
+
+.pipelineLabel {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.pipelineCount {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--gold);
+  width: 40px;
+  text-align: right;
+}
+
+.pipelineValor {
+  font-size: 11px;
+  color: var(--text-muted);
+  width: 80px;
+  text-align: right;
+}
+
+.indicacoes {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.indRow, .recRow {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.indLabel {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.indValue {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.indMeta {
+  font-size: 10px;
+  color: var(--text-muted);
+}

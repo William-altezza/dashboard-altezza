@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(supabase --version)",
+      "Bash(supabase status *)",
+      "Bash(npm install *)",
+      "Bash(npm ls *)",
+      "Bash(node *)",
+      "Bash(npm run *)",
+      "Bash(npm test *)",
+      "Bash(supabase functions *)",
+      "Bash(vercel *)",
+      "Bash(npx vercel *)"
+    ]
+  }
+}
