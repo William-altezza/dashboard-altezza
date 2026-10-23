@@ -82,3 +82,183 @@
   font-size: 10px;
   color: var(--text-muted);
 }
+
+/* ── Cabeçalhos das duas leituras da Visão Geral ────────────────────────── */
+.sectionHeader {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  color: var(--gold);
+  text-transform: uppercase;
+}
+
+.sectionSub {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.statRow {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  padding-top: 8px;
+}
+
+.statBig {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.statOf {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-left: 5px;
+}
+
+.statLabel {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.funnelFooter {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.funnelFooterHint {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* ── Faixa "leads em risco" ─────────────────────────────────────────────── */
+.alerta {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--negative);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: calc(var(--gap) * 1.5);
+}
+
+.alertaTopo {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.alertaNum {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--negative);
+  line-height: 1;
+}
+
+.alertaTexto {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.alertaUrgente { color: var(--negative); }
+.alertaPotencial { color: var(--gold); }
+
+.alertaNota {
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-basis: 100%;
+}
+
+.alertaCorretores {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.alertaChip {
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+
+.alertaChipUrg {
+  color: var(--negative);
+  font-style: normal;
+}
+
+.alertaLista {
+  margin-top: 10px;
+  border-top: 1px dashed var(--border);
+  padding-top: 8px;
+}
+
+.alertaLinha {
+  display: grid;
+  grid-template-columns: 46px 1fr 150px auto;
+  gap: 8px;
+  align-items: center;
+  font-size: 11px;
+  padding: 3px 0;
+}
+
+.alertaPrazo { font-weight: 700; }
+
+.alertaNome {
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.alertaCorretor { color: var(--text-muted); }
+
+.alertaTag {
+  font-size: 9px;
+  color: var(--gold);
+  border: 1px solid var(--gold);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
+.alertaMais {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+.toggleBtn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  padding: 6px 10px;
+  cursor: pointer;
+  align-self: flex-start;
+}
+.toggleBtn:hover { color: var(--gold); border-color: var(--gold); }

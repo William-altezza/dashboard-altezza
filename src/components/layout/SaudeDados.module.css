@@ -1,0 +1,20 @@
+.wrap {
+  padding: 0 var(--gap-lg);
+}
+
+.alerta {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--negative);
+  border-radius: var(--radius-sm);
+  background: rgba(248, 113, 113, 0.08);
+  color: var(--negative);
+  font-size: 12px;
+}
+
+.info {
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: right;
+}

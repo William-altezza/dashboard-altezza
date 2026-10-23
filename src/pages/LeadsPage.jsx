@@ -3,7 +3,7 @@ import { Tile } from '../components/ui/Tile'
 import { useLeads } from '../hooks/useMetrics'
 import { formatBRL, formatDays } from '../lib/formatters'
 import { format, parseISO } from 'date-fns'
-import Papa from 'papaparse'
+import { baixarCSV } from '../lib/exportCsv'
 import styles from './LeadsPage.module.css'
 
 const FUNNEL_LABELS = {
@@ -90,14 +90,7 @@ export function LeadsPage() {
       }
     })
 
-    const csv = Papa.unparse(rows, { delimiter: ';' })
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
-    const url  = URL.createObjectURL(blob)
-    const a    = document.createElement('a')
-    a.href     = url
-    a.download = `leads-altezza-${format(new Date(), 'yyyy-MM-dd')}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
+    baixarCSV(rows, 'leads-altezza')
   }
 
   const SortIcon = ({ col }) => {

@@ -7,6 +7,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 
 import { theme } from '../styles/theme'
 import { FunnelChart } from '../components/charts/FunnelChart'
 import { effectiveStage } from '../lib/funnel'
+import { ExportCSVButton } from '../components/ui/ExportCSVButton'
 import styles from './Corretores.module.css'
 
 const FUNNEL_STAGES = ['new','in_attendance','potencial','scheduled_visit','done_visit','created_offer','converted','lost']
@@ -108,6 +109,17 @@ export function Corretores() {
 
       {/* Tabela comparativa */}
       <Tile title="COMPARATIVO DE CORRETORES">
+        <ExportCSVButton nome="corretores-altezza" rows={stats.map(s => ({
+          corretor: s.corretor || 'Sem atribuição',
+          leads: s.leads,
+          vendas: s.vendas,
+          taxa_conversao_pct: s.taxaConv != null ? (s.taxaConv * 100).toFixed(1) : '',
+          receita: s.receita,
+          ticket_medio: s.ticketMedio != null ? Math.round(s.ticketMedio) : '',
+          cac: s.cac != null ? Math.round(s.cac) : '',
+          tempo_medio_dias: s.tempoMedio != null ? Math.round(s.tempoMedio) : '',
+          pipeline: s.pipeline,
+        }))} />
         <div className={styles.tableWrap}>
           <table className={styles.table}>
             <thead>

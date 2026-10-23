@@ -1,5 +1,6 @@
 import { Sidebar } from './Sidebar'
 import { FilterBar } from './FilterBar'
+import { SaudeDados } from './SaudeDados'
 import styles from './Layout.module.css'
 
 export function Layout({ children }) {
@@ -8,6 +9,7 @@ export function Layout({ children }) {
       <Sidebar />
       <div className={styles.main}>
         <FilterBar />
+        <SaudeDados />
         <div className={styles.content}>
           {children}
         </div>

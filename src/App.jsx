@@ -10,6 +10,8 @@ import { CohortCiclo } from './pages/CohortCiclo'
 import { LeadsPage } from './pages/LeadsPage'
 import { HeatmapPage } from './pages/HeatmapPage'
 import { Admin } from './pages/Admin'
+import { Duplicados } from './pages/Duplicados'
+import { Campanhas } from './pages/Campanhas'
 
 function ProtectedRoute({ children, adminOnly = false }) {
   const { user, loading, isAdmin } = useAuth()
@@ -37,6 +39,8 @@ function AppRoutes() {
                 <Route path="cohort" element={<CohortCiclo />} />
                 <Route path="leads" element={<LeadsPage />} />
                 <Route path="heatmap" element={<HeatmapPage />} />
+                <Route path="duplicados" element={<Duplicados />} />
+                <Route path="campanhas" element={<Campanhas />} />
                 <Route path="admin" element={
                   <ProtectedRoute adminOnly>
                     <Admin />

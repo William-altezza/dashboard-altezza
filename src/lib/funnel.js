@@ -32,6 +32,15 @@ export function hasTagPotencial(lead) {
   return (lead?.tags || []).some(t => normalizeTag(t) === 'potencial')
 }
 
+// Indicação: a Altezza marca no C2S com a etiqueta "Indicação" (a origem do
+// lead pode continuar sendo "Instagram Leads" etc). Mantém também o caso
+// antigo em que a própria origem diz "indicação".
+export function isIndicacao(lead) {
+  const tag = (lead?.tags || []).some(t => normalizeTag(t).startsWith('indica'))
+  const origem = (lead?.origem || '').toLowerCase().includes('indica')
+  return tag || origem
+}
+
 // Etapa "efetiva" de um lead para fins de visualização do funil.
 export function effectiveStage(lead) {
   if (lead.funnel_status_atual === 'in_attendance' && hasTagPotencial(lead)) {

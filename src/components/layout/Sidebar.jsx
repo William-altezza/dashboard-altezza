@@ -9,6 +9,8 @@ const NAV_ITEMS = [
   { to: '/cohort',        label: 'Cohort & Ciclo',     icon: '◧' },
   { to: '/leads',         label: 'Leads',              icon: '◫' },
   { to: '/heatmap',       label: 'Heatmap',            icon: '▦' },
+  { to: '/campanhas',     label: 'Campanhas Meta',     icon: '◎' },
+  { to: '/duplicados',    label: 'Duplicados',         icon: '⧉' },
 ]
 
 const ADMIN_NAV = { to: '/admin', label: 'Admin', icon: '⚙' }

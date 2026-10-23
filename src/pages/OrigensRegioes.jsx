@@ -9,6 +9,8 @@ import {
 } from 'recharts'
 import { theme } from '../styles/theme'
 import { COMISSAO_PCT } from '../lib/constants'
+import { isIndicacao } from '../lib/funnel'
+import { ExportCSVButton } from '../components/ui/ExportCSVButton'
 import styles from './OrigensRegioes.module.css'
 
 const ORIGENS_PAGAS = ['Instagram Leads','Facebook Leads','CTWA Facebook - Anúncios',
@@ -26,6 +28,8 @@ function buildOrigemStats(leads, vendas, investTotal) {
     if (!map[o]) map[o] = { origem: o, leads: 0, vendas: 0, receita: 0, tempos: [] }
     map[o].vendas++
     map[o].receita += v.valor_venda || 0
+    // Vendas marcadas como indicação não vêm do anúncio: ficam fora do ROAS.
+    if (!isIndicacao(v)) map[o].receitaAds = (map[o].receitaAds || 0) + (v.valor_venda || 0)
     if (v.done_deal_at && v.data_entrada) {
       map[o].tempos.push((new Date(v.done_deal_at) - new Date(v.data_entrada)) / 86400000)
     }
@@ -44,7 +48,7 @@ function buildOrigemStats(leads, vendas, investTotal) {
       cpl: o.leads > 0 ? investDir / o.leads : null,
       cac: o.vendas > 0 ? investDir / o.vendas : null,
       // Comissão real da Altezza (5% da receita/VGV), não a VGV bruta
-      roas: isPaga && investDir > 0 ? (o.receita * COMISSAO_PCT) / investDir : null,
+      roas: isPaga && investDir > 0 ? ((o.receitaAds || 0) * COMISSAO_PCT) / investDir : null,
       ticketMedio: o.vendas > 0 ? o.receita / o.vendas : null,
       tempoMedio,
       investDir,
@@ -118,6 +122,11 @@ export function OrigensRegioes() {
 
       {/* Por Região */}
       <Tile title="POR REGIÃO">
+        <ExportCSVButton nome="regioes-altezza" rows={regiaoStats.map(r => ({
+          regiao: r.regiao, leads: r.leads, vendas: r.vendas,
+          taxa_conversao_pct: r.taxaConv != null ? (r.taxaConv * 100).toFixed(1) : '',
+          receita: r.receita, cac: r.cac != null ? Math.round(r.cac) : '',
+        }))} />
         <div className={styles.tableWrap}>
           <table className={styles.table}>
             <thead>
@@ -153,6 +162,14 @@ export function OrigensRegioes() {
 
       {/* Por Origem */}
       <Tile title="POR ORIGEM" subtitle={topOrigem ? `mais rentável: ${topOrigem.origem}` : ''} span={2}>
+        <ExportCSVButton nome="origens-altezza" rows={origemStats.map(o => ({
+          origem: o.origem, paga: o.paga ? 'sim' : 'não', leads: o.leads, vendas: o.vendas,
+          taxa_conversao_pct: o.taxaConv != null ? (o.taxaConv * 100).toFixed(1) : '',
+          cpl: o.cpl != null ? Math.round(o.cpl) : '', receita: o.receita,
+          roas: o.roas != null ? o.roas.toFixed(2) : '',
+          ticket_medio: o.ticketMedio != null ? Math.round(o.ticketMedio) : '',
+          tempo_medio_dias: o.tempoMedio != null ? Math.round(o.tempoMedio) : '',
+        }))} />
         <div className={styles.tableWrap}>
           <table className={styles.table}>
             <thead>
