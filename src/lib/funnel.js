@@ -41,6 +41,31 @@ export function isIndicacao(lead) {
   return tag || origem
 }
 
+// Motivos de perda do C2S (códigos internos → português).
+const MOTIVOS_PERDA = {
+  inactive:              'Sem atividade',
+  return_delay:          'Não retornou',
+  fail_to_contact:       'Sem contato',
+  invalid:               'Contato inválido',
+  just_researching:      'Só pesquisando',
+  without_qualification: 'Sem qualificação',
+  bought_elsewhere:      'Comprou em outro lugar',
+  high_price:            'Preço alto',
+  not_ready_to_buy:      'Ainda não quer comprar',
+  bad_localization:      'Localização',
+  underprivileged:       'Sem perfil financeiro',
+  partner_agent:         'Corretor parceiro',
+  impossible_proposal:   'Proposta inviável',
+  z_others:              'Outros',
+}
+
+// Texto curto do motivo de arquivamento, ou null se o lead não foi arquivado.
+export function motivoPerdaLabel(lead) {
+  if (lead?.funnel_status_atual !== 'lost' && !lead?.arquivado) return null
+  const base = MOTIVOS_PERDA[lead.motivo_perda] || (lead.motivo_perda ? lead.motivo_perda : 'Motivo não informado')
+  return lead.arquivado_por === 'automatico' ? `${base} · automático` : base
+}
+
 // Etapa "efetiva" de um lead para fins de visualização do funil.
 export function effectiveStage(lead) {
   if (lead.funnel_status_atual === 'in_attendance' && hasTagPotencial(lead)) {

@@ -6,7 +6,7 @@ import { KPICard } from '../components/ui/KPICard'
 import { ExportCSVButton } from '../components/ui/ExportCSVButton'
 import { formatBRL, formatNumber, formatPct } from '../lib/formatters'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
-import { hasTagPotencial } from '../lib/funnel'
+import { hasTagPotencial, motivoPerdaLabel } from '../lib/funnel'
 import { useAuth } from '../hooks/useAuth'
 
 // Como o corretor tratou o lead no C2S (quem entrou no período selecionado).
@@ -190,7 +190,7 @@ export function Campanhas() {
             .order('data').order('campaign_id')),
           paginar(() => supabase.from('meta_campanhas').select('*').order('campaign_id')),
           paginar(() => supabase.from('leads')
-            .select('id_lead,nome_cliente,corretor,funnel_status_atual,tags,arquivado,valor_venda,meta_ad_id,data_entrada')
+            .select('id_lead,nome_cliente,corretor,funnel_status_atual,tags,arquivado,arquivado_por,motivo_perda,valor_venda,meta_ad_id,data_entrada')
             .not('meta_ad_id', 'is', null)
             .gte('data_entrada', `${iso(dateRange[0])}T00:00:00-03:00`)
             .lte('data_entrada', `${iso(dateRange[1])}T23:59:59-03:00`)
@@ -437,8 +437,8 @@ export function Campanhas() {
 
   const popupEl = popup && (
     <div style={{
-      position: 'fixed', left: Math.min(popup.x + 14, window.innerWidth - 330), top: Math.max(popup.y - 10, 8),
-      width: 310, zIndex: 999, pointerEvents: 'none', background: 'var(--surface)',
+      position: 'fixed', left: Math.min(popup.x + 14, window.innerWidth - 380), top: Math.max(popup.y - 10, 8),
+      width: 360, zIndex: 999, pointerEvents: 'none', background: 'var(--surface)',
       border: `1px solid ${BOLA[popup.tipo].cor}`, borderRadius: 'var(--radius)', padding: '10px 12px',
       fontSize: 11, color: 'var(--text-primary)', boxShadow: '0 6px 20px rgba(0,0,0,0.5)',
     }}>
@@ -450,7 +450,12 @@ export function Campanhas() {
       </div>
       {popup.leads.slice(0, 10).map(l => (
         <div key={l.id_lead} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '1px 0' }}>
-          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.nome_cliente || '(sem nome)'}</span>
+          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {l.nome_cliente || '(sem nome)'}
+            {popup.tipo === 'arquivado' && (
+              <span style={{ color: BOLA.arquivado.cor }}> ({motivoPerdaLabel(l)})</span>
+            )}
+          </span>
           <span style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
             {(l.corretor || '').split(' ')[0]}
             {popup.tipo === 'fechado' && l.valor_venda ? ` · ${formatBRL(l.valor_venda, { compact: true })}` : ''}
