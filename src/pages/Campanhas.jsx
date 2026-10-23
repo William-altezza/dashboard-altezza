@@ -116,6 +116,7 @@ export function Campanhas() {
   const [leadsAd, setLeadsAd] = useState([])            // leads do C2S que vieram de anúncio, no período
   const [anuncios, setAnuncios] = useState({})          // ad_id → { adset_id, campaign_id }
   const [popup, setPopup] = useState(null)
+  const [popMotivos, setPopMotivos] = useState(null)    // { x, y } quando o mouse está no card Arquivados
   const { isAdmin } = useAuth()
   const [modal, setModal] = useState(null)              // confirmação do liga/desliga: { tipo, id, nome, acao }
   const [executando, setExecutando] = useState(false)
@@ -292,6 +293,17 @@ export function Campanhas() {
     const q = { potencial: 0, arquivado: 0, fechado: 0 }
     for (const l of leadsAd) { const c = classe(l); if (q[c] !== undefined) q[c]++ }
     return q
+  }, [leadsAd])
+
+  // Arquivados do período, agrupados pelo motivo registrado no C2S.
+  const motivosArq = useMemo(() => {
+    const m = {}
+    for (const l of leadsAd) {
+      if (classe(l) !== 'arquivado') continue
+      const k = motivoPerdaLabel(l)
+      m[k] = (m[k] || 0) + 1
+    }
+    return Object.entries(m).sort((a, b) => b[1] - a[1])
   }, [leadsAd])
 
   const tot = useMemo(() => {
@@ -474,6 +486,26 @@ export function Campanhas() {
     </div>
   )
 
+  const popMotivosEl = popMotivos && motivosArq.length > 0 && (
+    <div style={{
+      position: 'fixed', left: Math.min(popMotivos.x + 14, window.innerWidth - 330), top: popMotivos.y + 14,
+      width: 310, zIndex: 999, pointerEvents: 'none', background: 'var(--surface)',
+      border: `1px solid ${BOLA.arquivado.cor}`, borderRadius: 'var(--radius)', padding: '10px 12px',
+      fontSize: 12, color: 'var(--text-primary)', boxShadow: '0 6px 20px rgba(0,0,0,0.5)',
+    }}>
+      <div style={{ color: BOLA.arquivado.cor, fontWeight: 700, marginBottom: 6 }}>
+        {qualidade.arquivado} arquivado{qualidade.arquivado > 1 ? 's' : ''} — por motivo
+      </div>
+      {motivosArq.map(([motivo, n]) => (
+        <div key={motivo} style={{ display: 'flex', gap: 8, padding: '1px 0' }}>
+          <span style={{ width: 22, textAlign: 'right', fontWeight: 700 }}>{n}</span>
+          <span>-</span>
+          <span>{motivo}</span>
+        </div>
+      ))}
+    </div>
+  )
+
   const TIPO_TXT = { campanha: 'a campanha', conjunto: 'o conjunto', anuncio: 'o anúncio' }
 
   const modalEl = modal && (
@@ -528,6 +560,7 @@ export function Campanhas() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap)' }}>
       {popupEl}
+      {popMotivosEl}
       {modalEl}
       {toastEl}
       <div className="tile-grid-4">
@@ -537,8 +570,12 @@ export function Campanhas() {
           tooltip="Gasto ÷ (leads de formulário + conversas iniciadas), na visão do Meta. O CPL da Visão Geral usa os leads que chegaram ao C2S." />
         <KPICard title="POTENCIAIS NO PERÍODO" value={formatNumber(qualidade.potencial)} loading={carregando}
           tooltip="Leads de anúncio que entraram no período, ainda abertos e com a etiqueta Potencial no C2S" />
-        <KPICard title="ARQUIVADOS NO PERÍODO" value={formatNumber(qualidade.arquivado)} loading={carregando}
-          tooltip="Leads de anúncio que entraram no período e foram arquivados ou perdidos no C2S" />
+        <div
+          onMouseEnter={e => setPopMotivos({ x: e.clientX, y: e.clientY })}
+          onMouseMove={e => setPopMotivos({ x: e.clientX, y: e.clientY })}
+          onMouseLeave={() => setPopMotivos(null)}>
+          <KPICard title="ARQUIVADOS NO PERÍODO" value={formatNumber(qualidade.arquivado)} loading={carregando} />
+        </div>
       </div>
 
       <Tile title="GASTO DIÁRIO" subtitle="todas as campanhas">
