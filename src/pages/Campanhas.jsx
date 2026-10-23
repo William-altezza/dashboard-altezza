@@ -288,6 +288,12 @@ export function Campanhas() {
     return new Date(ts[ts.length - 1]).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
   }, [camps])
 
+  const qualidade = useMemo(() => {
+    const q = { potencial: 0, arquivado: 0, fechado: 0 }
+    for (const l of leadsAd) { const c = classe(l); if (q[c] !== undefined) q[c]++ }
+    return q
+  }, [leadsAd])
+
   const tot = useMemo(() => {
     const t = linhas.reduce((s, l) => ({
       gasto: s.gasto + l.gasto, impressoes: s.impressoes + l.impressoes,
@@ -524,15 +530,15 @@ export function Campanhas() {
       {popupEl}
       {modalEl}
       {toastEl}
-      <div className="tile-grid-5">
+      <div className="tile-grid-4">
         <KPICard title="GASTO NO PERÍODO" value={formatBRL(tot.gasto)} loading={carregando}
           tooltip="Soma das campanhas, direto do Gerenciador de Anúncios" />
-        <KPICard title="CAMPANHAS ATIVAS" value={formatNumber(tot.ativas)} loading={carregando} />
-        <KPICard title="IMPRESSÕES" value={formatNumber(tot.impressoes)} loading={carregando} />
-        <KPICard title="CTR (LINK)" value={formatPct(tot.ctr)} loading={carregando}
-          tooltip="Cliques no link ÷ impressões" />
-        <KPICard title="CUSTO POR RESULTADO" value={formatBRL(tot.custo)} loading={carregando}
-          tooltip="Gasto ÷ (leads de formulário + conversas iniciadas). É a visão do Meta; o CPL do dashboard usa os leads que chegaram ao C2S." />
+        <KPICard title="CUSTO POR RESULTADO (CPL)" value={formatBRL(tot.custo)} loading={carregando}
+          tooltip="Gasto ÷ (leads de formulário + conversas iniciadas), na visão do Meta. O CPL da Visão Geral usa os leads que chegaram ao C2S." />
+        <KPICard title="POTENCIAIS NO PERÍODO" value={formatNumber(qualidade.potencial)} loading={carregando}
+          tooltip="Leads de anúncio que entraram no período, ainda abertos e com a etiqueta Potencial no C2S" />
+        <KPICard title="ARQUIVADOS NO PERÍODO" value={formatNumber(qualidade.arquivado)} loading={carregando}
+          tooltip="Leads de anúncio que entraram no período e foram arquivados ou perdidos no C2S" />
       </div>
 
       <Tile title="GASTO DIÁRIO" subtitle="todas as campanhas">
