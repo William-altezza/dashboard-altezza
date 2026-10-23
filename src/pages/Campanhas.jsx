@@ -486,6 +486,13 @@ export function Campanhas() {
     </div>
   )
 
+  // Negócios fechados dos leads de anúncio do período (lista no popup, com valor).
+  function fechadosHover(e) {
+    const lista = leadsAd.filter(l => classe(l) === 'fechado')
+    if (!lista.length) return
+    setPopup({ x: e.clientX, y: e.clientY, titulo: 'Leads de anúncio do período', tipo: 'fechado', leads: lista })
+  }
+
   const popMotivosEl = popMotivos && motivosArq.length > 0 && (
     <div style={{
       position: 'fixed', left: Math.min(popMotivos.x + 14, window.innerWidth - 330), top: popMotivos.y + 14,
@@ -563,13 +570,19 @@ export function Campanhas() {
       {popMotivosEl}
       {modalEl}
       {toastEl}
-      <div className="tile-grid-4">
+      <div className="tile-grid-5">
         <KPICard title="GASTO NO PERÍODO" value={formatBRL(tot.gasto)} loading={carregando}
           tooltip="Soma das campanhas, direto do Gerenciador de Anúncios" />
         <KPICard title="CUSTO POR RESULTADO (CPL)" value={formatBRL(tot.custo)} loading={carregando}
           tooltip="Gasto ÷ (leads de formulário + conversas iniciadas), na visão do Meta. O CPL da Visão Geral usa os leads que chegaram ao C2S." />
         <KPICard title="POTENCIAIS NO PERÍODO" value={formatNumber(qualidade.potencial)} loading={carregando}
           tooltip="Leads de anúncio que entraram no período, ainda abertos e com a etiqueta Potencial no C2S" />
+        <div
+          onMouseEnter={e => fechadosHover(e)}
+          onMouseMove={e => fechadosHover(e)}
+          onMouseLeave={() => setPopup(null)}>
+          <KPICard title="NEGÓCIO FECHADO NO PERÍODO" value={formatNumber(qualidade.fechado)} loading={carregando} />
+        </div>
         <div
           onMouseEnter={e => setPopMotivos({ x: e.clientX, y: e.clientY })}
           onMouseMove={e => setPopMotivos({ x: e.clientX, y: e.clientY })}
