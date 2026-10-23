@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useFilters } from '../hooks/useFilters'
 import { Tile } from '../components/ui/Tile'
@@ -117,48 +117,65 @@ export function Campanhas() {
   const [anuncios, setAnuncios] = useState({})          // ad_id → { adset_id, campaign_id }
   const [popup, setPopup] = useState(null)
   const { isAdmin } = useAuth()
-  const [modal, setModal] = useState(null)              // { tipo, id, nome, acao, orcamento }
-  const [novoOrc, setNovoOrc] = useState('')
+  const [modal, setModal] = useState(null)              // confirmação do liga/desliga: { tipo, id, nome, acao }
   const [executando, setExecutando] = useState(false)
   const [resultado, setResultado] = useState(null)      // { ok, texto }
   const [overrides, setOverrides] = useState({})        // alterações já feitas: id → { status?, orcamento? }
-  const ncol = isAdmin ? 14 : 13
+  const [editOrc, setEditOrc] = useState(null)          // edição inline do orçamento: { id, tipo, atual, valor }
+  const [salvandoOrc, setSalvandoOrc] = useState(false)
+  const [toast, setToast] = useState(null)              // { ok, texto }
+  const ncol = 13
 
-  async function executar() {
-    if (!modal) return
-    setExecutando(true); setResultado(null)
-    const valor = modal.acao === 'orcamento' ? Number(String(novoOrc).replace(',', '.')) : undefined
-    const { data, error } = await supabase.functions.invoke('meta-acao', {
-      body: { tipo: modal.tipo, id: modal.id, acao: modal.acao, valor },
-    })
-    setExecutando(false)
+  function mostrarToast(ok, texto) {
+    setToast({ ok, texto })
+    setTimeout(() => setToast(null), ok ? 3000 : 7000)
+  }
+
+  // Chama a função segura do servidor (confere admin, limites e registra no histórico).
+  async function chamarMeta(tipo, id, acao, valor) {
+    const { data, error } = await supabase.functions.invoke('meta-acao', { body: { tipo, id, acao, valor } })
+    if (data?.ok) {
+      setOverrides(o => ({
+        ...o,
+        [id]: {
+          ...(o[id] || {}),
+          ...(acao === 'pausar' ? { status: 'PAUSED' } : {}),
+          ...(acao === 'ativar' ? { status: 'ACTIVE' } : {}),
+          ...(acao === 'orcamento' ? { orcamento: valor } : {}),
+        },
+      }))
+      return { ok: true }
+    }
     // erros de negócio vêm no corpo (status != 2xx faz o invoke devolver `error`)
     let msg = data?.erro
     if (!data && error) {
       try { msg = (await error.context?.json?.())?.erro } catch { /* ignora */ }
       msg = msg || error.message
     }
-    if (data?.ok) {
-      setOverrides(o => ({
-        ...o,
-        [modal.id]: {
-          ...(o[modal.id] || {}),
-          ...(modal.acao === 'pausar' ? { status: 'PAUSED' } : {}),
-          ...(modal.acao === 'ativar' ? { status: 'ACTIVE' } : {}),
-          ...(modal.acao === 'orcamento' ? { orcamento: valor } : {}),
-        },
-      }))
+    return { ok: false, msg: msg || 'Não foi possível concluir a ação.' }
+  }
+
+  async function executar() {
+    if (!modal) return
+    setExecutando(true); setResultado(null)
+    const r = await chamarMeta(modal.tipo, modal.id, modal.acao)
+    setExecutando(false)
+    if (r.ok) {
       setResultado({ ok: true, texto: 'Feito. A alteração já foi aplicada no Meta.' })
-      setTimeout(() => { setModal(null); setResultado(null) }, 1400)
+      setTimeout(() => { setModal(null); setResultado(null) }, 1200)
     } else {
-      setResultado({ ok: false, texto: msg || 'Não foi possível concluir a ação.' })
+      setResultado({ ok: false, texto: r.msg })
     }
   }
 
-  function abrirAcao(l, tipo, acao) {
-    setNovoOrc(acao === 'orcamento' ? String(l.orcamento ?? '') : '')
-    setResultado(null)
-    setModal({ tipo, id: l.id, nome: l.nome, acao, orcamento: l.orcamento })
+  async function salvarOrc() {
+    if (!editOrc) return
+    const valor = Number(String(editOrc.valor).replace(',', '.'))
+    setSalvandoOrc(true)
+    const r = await chamarMeta(editOrc.tipo, editOrc.id, 'orcamento', valor)
+    setSalvandoOrc(false)
+    if (r.ok) { mostrarToast(true, `Orçamento alterado para ${formatBRL(valor)} no Meta.`); setEditOrc(null) }
+    else mostrarToast(false, r.msg)
   }
 
   useEffect(() => {
@@ -297,7 +314,9 @@ export function Campanhas() {
   const th = { cursor: 'pointer', textAlign: 'right', whiteSpace: 'nowrap', padding: '6px 8px' }
 
   // Uma linha da tabela, em qualquer nível (0 campanha, 1 conjunto, 2 anúncio).
-  function Linha({ l, nivel }) {
+  // É uma FUNÇÃO (não um componente): assim as linhas não são recriadas a cada
+  // movimento do mouse e o popup das bolinhas some corretamente.
+  function renderLinha(l, nivel) {
     const tipo = nivel === 0 ? 'c' : 'a'
     const chave = `${tipo}:${l.id}`
     const expansivel = nivel < 2
@@ -307,9 +326,15 @@ export function Campanhas() {
     const status = ov.status ?? l.status
     const orcamento = ov.orcamento ?? l.orcamento
     const tipoApi = nivel === 0 ? 'campanha' : nivel === 1 ? 'conjunto' : 'anuncio'
-    const btn = { background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-secondary)', borderRadius: 4, fontSize: 11, padding: '2px 7px', cursor: 'pointer', marginLeft: 4 }
+    const podeLigar = isAdmin && (status === 'ACTIVE' || status === 'PAUSED')
+    const editando = editOrc?.id === l.id
+    const valorEd = editando ? Number(String(editOrc.valor).replace(',', '.')) : null
+    const varEd = editando && orcamento > 0 && isFinite(valorEd) ? (valorEd - orcamento) / orcamento : null
+    const edInvalido = editando && (!isFinite(valorEd) || valorEd < 5 || (varEd != null && varEd > 0.5))
+    const pequeno = { background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-secondary)', borderRadius: 4, fontSize: 11, padding: '1px 6px', cursor: 'pointer', marginLeft: 4 }
+
     return (
-      <>
+      <Fragment key={l.id}>
         <tr
           style={{
             borderTop: '1px solid var(--border)', textAlign: 'right',
@@ -329,9 +354,28 @@ export function Campanhas() {
             )}
             {l.nome}
           </td>
-          <td style={{ textAlign: 'left', color: status === 'ACTIVE' ? 'var(--positive)' : 'var(--text-muted)' }}>
-            {STATUS_LABEL[status] || status}
+
+          {/* Status com liga/desliga, como no Gerenciador de Anúncios */}
+          <td style={{ textAlign: 'left', whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
+            {podeLigar ? (
+              <button
+                role="switch" aria-checked={status === 'ACTIVE'}
+                title={status === 'ACTIVE' ? 'Ativa — clique para pausar' : 'Pausada — clique para ativar'}
+                onClick={() => { setResultado(null); setModal({ tipo: tipoApi, id: l.id, nome: l.nome, acao: status === 'ACTIVE' ? 'pausar' : 'ativar' }) }}
+                style={{
+                  width: 34, height: 18, borderRadius: 9, border: 'none', padding: 2, cursor: 'pointer',
+                  background: status === 'ACTIVE' ? 'var(--positive)' : 'var(--border)',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: status === 'ACTIVE' ? 'flex-end' : 'flex-start',
+                  verticalAlign: 'middle', marginRight: 8,
+                }}>
+                <span style={{ width: 14, height: 14, borderRadius: '50%', background: '#fff', display: 'block' }} />
+              </button>
+            ) : null}
+            <span style={{ color: status === 'ACTIVE' ? 'var(--positive)' : 'var(--text-muted)', verticalAlign: 'middle' }}>
+              {STATUS_LABEL[status] || status}
+            </span>
           </td>
+
           <td style={{ whiteSpace: 'nowrap' }}>
             <Bolinhas
               leads={(nivel === 0 ? idx.porCamp : nivel === 1 ? idx.porAdset : idx.porAd)[l.id]}
@@ -339,7 +383,35 @@ export function Campanhas() {
               onHover={setPopup}
             />
           </td>
-          <td>{orcamento != null ? formatBRL(orcamento) : '—'}</td>
+
+          {/* Orçamento: admin clica no valor para editar na própria célula */}
+          <td style={{ whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
+            {orcamento == null ? '—' : editando ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <input
+                  autoFocus value={editOrc.valor} inputMode="decimal" disabled={salvandoOrc}
+                  onChange={e => setEditOrc(o => ({ ...o, valor: e.target.value }))}
+                  onKeyDown={e => { if (e.key === 'Enter' && !edInvalido) salvarOrc(); if (e.key === 'Escape') setEditOrc(null) }}
+                  style={{ width: 70, background: 'var(--bg-deep)', color: 'var(--text-primary)', border: `1px solid ${edInvalido ? 'var(--negative)' : 'var(--gold)'}`, borderRadius: 4, padding: '2px 6px', fontSize: 12, textAlign: 'right' }} />
+                <button style={{ ...pequeno, color: 'var(--positive)', opacity: edInvalido || salvandoOrc ? 0.4 : 1 }}
+                  disabled={edInvalido || salvandoOrc} title="Salvar no Meta" onClick={salvarOrc}>✓</button>
+                <button style={pequeno} disabled={salvandoOrc} title="Cancelar" onClick={() => setEditOrc(null)}>✕</button>
+                {varEd != null && (
+                  <span style={{ fontSize: 10, color: varEd > 0.5 ? 'var(--negative)' : 'var(--text-muted)' }}>
+                    {varEd >= 0 ? '▲' : '▼'}{Math.abs(varEd * 100).toFixed(0)}%{varEd > 0.5 ? ' máx. +50%' : ''}
+                  </span>
+                )}
+              </span>
+            ) : isAdmin ? (
+              <span
+                title="Clique para alterar o orçamento diário"
+                onClick={() => setEditOrc({ id: l.id, tipo: tipoApi, valor: String(orcamento) })}
+                style={{ cursor: 'pointer', borderBottom: '1px dashed var(--text-muted)' }}>
+                {formatBRL(orcamento)} <span style={{ color: 'var(--gold)', fontSize: 10 }}>✎</span>
+              </span>
+            ) : formatBRL(orcamento)}
+          </td>
+
           <td style={{ color: 'var(--gold)', fontWeight: 600 }}>{formatBRL(l.gasto)}</td>
           <td>{formatNumber(l.impressoes)}</td>
           <td>{formatNumber(l.cliques)}</td>
@@ -349,19 +421,6 @@ export function Campanhas() {
           <td>{formatNumber(l.leads)}</td>
           <td>{formatNumber(l.conversas)}</td>
           <td>{formatBRL(l.custoResultado)}</td>
-          {isAdmin && (
-            <td style={{ whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
-              {status === 'ACTIVE' && (
-                <button style={btn} title="Pausar no Meta" onClick={() => abrirAcao({ ...l, orcamento }, tipoApi, 'pausar')}>⏸ Pausar</button>
-              )}
-              {status === 'PAUSED' && (
-                <button style={{ ...btn, color: 'var(--positive)' }} title="Ativar no Meta" onClick={() => abrirAcao({ ...l, orcamento }, tipoApi, 'ativar')}>▶ Ativar</button>
-              )}
-              {orcamento != null && (
-                <button style={btn} title="Alterar orçamento diário" onClick={() => abrirAcao({ ...l, orcamento }, tipoApi, 'orcamento')}>R$</button>
-              )}
-            </td>
-          )}
         </tr>
         {aberto && !lista && (
           <tr><td colSpan={ncol} style={{ padding: '6px 8px', paddingLeft: 30 + nivel * 22, color: 'var(--text-muted)' }}>Carregando...</td></tr>
@@ -371,10 +430,8 @@ export function Campanhas() {
             Sem dados neste período.
           </td></tr>
         )}
-        {aberto && lista && ordenar(lista).map(f => (
-          <Linha key={f.id} l={f} nivel={nivel + 1} />
-        ))}
-      </>
+        {aberto && lista && ordenar(lista).map(f => renderLinha(f, nivel + 1))}
+      </Fragment>
     )
   }
 
@@ -407,10 +464,6 @@ export function Campanhas() {
   )
 
   const TIPO_TXT = { campanha: 'a campanha', conjunto: 'o conjunto', anuncio: 'o anúncio' }
-  const orcNum = Number(String(novoOrc).replace(',', '.'))
-  const variacaoOrc = modal?.acao === 'orcamento' && modal.orcamento > 0 && isFinite(orcNum)
-    ? (orcNum - modal.orcamento) / modal.orcamento : null
-  const orcBloqueado = modal?.acao === 'orcamento' && (!isFinite(orcNum) || orcNum < 5 || (variacaoOrc != null && variacaoOrc > 0.5))
 
   const modalEl = modal && (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
@@ -420,28 +473,11 @@ export function Campanhas() {
         borderRadius: 'var(--radius)', padding: 20, color: 'var(--text-primary)', fontSize: 13,
       }}>
         <div style={{ fontWeight: 700, color: 'var(--gold)', marginBottom: 8 }}>
-          {modal.acao === 'pausar' ? 'Pausar' : modal.acao === 'ativar' ? 'Ativar' : 'Alterar orçamento'} — confirmar
+          {modal.acao === 'pausar' ? 'Pausar' : 'Ativar'} — confirmar
         </div>
         <div style={{ marginBottom: 12 }}>
-          {modal.acao === 'orcamento'
-            ? <>Orçamento diário d{TIPO_TXT[modal.tipo]} <strong>{modal.nome}</strong>:</>
-            : <>Você vai {modal.acao === 'pausar' ? 'pausar' : 'ativar'} {TIPO_TXT[modal.tipo]} <strong>{modal.nome}</strong> direto no Meta.</>}
+          Você vai {modal.acao === 'pausar' ? 'pausar' : 'ativar'} {TIPO_TXT[modal.tipo]} <strong>{modal.nome}</strong> direto no Meta.
         </div>
-
-        {modal.acao === 'orcamento' && (
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ color: 'var(--text-muted)', marginBottom: 6 }}>Atual: {formatBRL(modal.orcamento)}</div>
-            <input autoFocus value={novoOrc} onChange={e => setNovoOrc(e.target.value)} inputMode="decimal"
-              style={{ width: '100%', background: 'var(--bg-deep)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 4, padding: '8px 10px', fontSize: 14 }} />
-            {variacaoOrc != null && (
-              <div style={{ marginTop: 6, fontSize: 12, color: variacaoOrc > 0.5 ? 'var(--negative)' : 'var(--text-secondary)' }}>
-                {variacaoOrc >= 0 ? '▲' : '▼'} {Math.abs(variacaoOrc * 100).toFixed(0)}% em relação ao atual
-                {variacaoOrc > 0.5 && ' — aumento acima de 50% de uma vez é bloqueado; faça em etapas.'}
-              </div>
-            )}
-          </div>
-        )}
-
         {resultado && (
           <div style={{ marginBottom: 12, padding: '8px 10px', borderRadius: 4, fontSize: 12,
             border: `1px solid ${resultado.ok ? 'var(--positive)' : 'var(--negative)'}`,
@@ -449,19 +485,29 @@ export function Campanhas() {
             {resultado.texto}
           </div>
         )}
-
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button disabled={executando} onClick={() => setModal(null)}
             style={{ background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-secondary)', borderRadius: 4, padding: '6px 14px', cursor: 'pointer' }}>
             Cancelar
           </button>
-          <button disabled={executando || orcBloqueado || resultado?.ok} onClick={executar}
+          <button disabled={executando || resultado?.ok} onClick={executar}
             style={{ background: 'var(--gold)', border: 'none', color: '#0a1f1a', fontWeight: 700, borderRadius: 4, padding: '6px 16px',
-              cursor: executando || orcBloqueado ? 'default' : 'pointer', opacity: executando || orcBloqueado ? 0.5 : 1 }}>
+              cursor: executando ? 'default' : 'pointer', opacity: executando ? 0.5 : 1 }}>
             {executando ? 'Aplicando...' : 'Confirmar'}
           </button>
         </div>
       </div>
+    </div>
+  )
+
+  const toastEl = toast && (
+    <div style={{
+      position: 'fixed', right: 20, bottom: 20, zIndex: 1001, maxWidth: 380, padding: '10px 14px',
+      background: 'var(--surface)', borderRadius: 'var(--radius)', fontSize: 12,
+      border: `1px solid ${toast.ok ? 'var(--positive)' : 'var(--negative)'}`,
+      color: toast.ok ? 'var(--positive)' : 'var(--negative)', boxShadow: '0 6px 20px rgba(0,0,0,0.5)',
+    }}>
+      {toast.texto}
     </div>
   )
 
@@ -472,6 +518,7 @@ export function Campanhas() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap)' }}>
       {popupEl}
       {modalEl}
+      {toastEl}
       <div className="tile-grid-5">
         <KPICard title="GASTO NO PERÍODO" value={formatBRL(tot.gasto)} loading={carregando}
           tooltip="Soma das campanhas, direto do Gerenciador de Anúncios" />
@@ -546,7 +593,6 @@ export function Campanhas() {
                 <th style={th} onClick={() => ordenarPor('leads')}>Leads{seta('leads')}</th>
                 <th style={th} onClick={() => ordenarPor('conversas')}>Conversas{seta('conversas')}</th>
                 <th style={th} onClick={() => ordenarPor('custoResultado')}>Custo/result.{seta('custoResultado')}</th>
-                {isAdmin && <th style={{ ...th, cursor: 'default' }}>Ações</th>}
               </tr>
             </thead>
             <tbody>
@@ -554,7 +600,7 @@ export function Campanhas() {
               {!carregando && visiveis.length === 0 && (
                 <tr><td colSpan={ncol} style={{ padding: 12, color: 'var(--text-muted)' }}>Nenhuma campanha para este filtro e período.</td></tr>
               )}
-              {visiveis.map(l => <Linha key={l.id} l={l} nivel={0} />)}
+              {visiveis.map(l => renderLinha(l, 0))}
             </tbody>
           </table>
         </div>
