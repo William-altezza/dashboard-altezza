@@ -3,6 +3,7 @@ import { Tile } from '../components/ui/Tile'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { formatBRL } from '../lib/formatters'
+import { HistoricoMeta } from '../components/admin/HistoricoMeta'
 import { format, parseISO, startOfMonth, endOfMonth, subMonths } from 'date-fns'
 import styles from './Admin.module.css'
 
@@ -418,6 +419,8 @@ export function Admin() {
       </Tile>
 
       {/* Sync logs */}
+      <HistoricoMeta />
+
       <Tile title="STATUS DE SINCRONIZAÇÃO">
         <div className={styles.tableWrap}>
           <table className={styles.table}>

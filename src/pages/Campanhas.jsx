@@ -6,6 +6,49 @@ import { KPICard } from '../components/ui/KPICard'
 import { ExportCSVButton } from '../components/ui/ExportCSVButton'
 import { formatBRL, formatNumber, formatPct } from '../lib/formatters'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import { hasTagPotencial } from '../lib/funnel'
+import { useAuth } from '../hooks/useAuth'
+
+// Como o corretor tratou o lead no C2S (quem entrou no período selecionado).
+// Fechado > Arquivado > Potencial; o resto está "em andamento".
+function classe(l) {
+  if (l.funnel_status_atual === 'converted') return 'fechado'
+  if (l.funnel_status_atual === 'lost' || l.arquivado) return 'arquivado'
+  if (hasTagPotencial(l)) return 'potencial'
+  return 'aberto'
+}
+
+const BOLA = {
+  fechado:   { cor: '#34D399', rotulo: 'Negócio fechado' },
+  potencial: { cor: '#FACC15', rotulo: 'Potencial' },
+  arquivado: { cor: '#F87171', rotulo: 'Arquivado/perdido' },
+}
+
+// Bolinhas de qualidade: uma por categoria presente, com a contagem dentro.
+// Passar o mouse abre a lista dos leads daquela categoria.
+function Bolinhas({ leads, titulo, onHover }) {
+  if (!leads || leads.length === 0) return <span style={{ color: 'var(--text-muted)' }}>—</span>
+  const por = { fechado: [], potencial: [], arquivado: [] }
+  for (const l of leads) { const c = classe(l); if (por[c]) por[c].push(l) }
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end' }}>
+      <span style={{ color: 'var(--text-secondary)', marginRight: 2 }}>{leads.length}</span>
+      {Object.entries(por).map(([k, arr]) => arr.length > 0 && (
+        <span key={k}
+          onMouseEnter={e => onHover({ x: e.clientX, y: e.clientY, titulo, tipo: k, leads: arr })}
+          onMouseMove={e => onHover({ x: e.clientX, y: e.clientY, titulo, tipo: k, leads: arr })}
+          onMouseLeave={() => onHover(null)}
+          style={{
+            width: 18, height: 18, borderRadius: '50%', background: BOLA[k].cor, color: '#0a1f1a',
+            fontSize: 10, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'default',
+          }}>
+          {arr.length}
+        </span>
+      ))}
+    </span>
+  )
+}
 
 const STATUS_LABEL = {
   ACTIVE: 'Ativa', PAUSED: 'Pausada', CAMPAIGN_PAUSED: 'Campanha pausada', ADSET_PAUSED: 'Conj. pausado',
@@ -70,6 +113,53 @@ export function Campanhas() {
   const [ordem, setOrdem] = useState({ col: 'gasto', dir: 'desc' })
   const [abertos, setAbertos] = useState({})            // { 'c:ID': true, 'a:ID': true }
   const [filhos, setFilhos] = useState({})              // { 'c:ID': [conjuntos], 'a:ID': [anúncios] }
+  const [leadsAd, setLeadsAd] = useState([])            // leads do C2S que vieram de anúncio, no período
+  const [anuncios, setAnuncios] = useState({})          // ad_id → { adset_id, campaign_id }
+  const [popup, setPopup] = useState(null)
+  const { isAdmin } = useAuth()
+  const [modal, setModal] = useState(null)              // { tipo, id, nome, acao, orcamento }
+  const [novoOrc, setNovoOrc] = useState('')
+  const [executando, setExecutando] = useState(false)
+  const [resultado, setResultado] = useState(null)      // { ok, texto }
+  const [overrides, setOverrides] = useState({})        // alterações já feitas: id → { status?, orcamento? }
+  const ncol = isAdmin ? 14 : 13
+
+  async function executar() {
+    if (!modal) return
+    setExecutando(true); setResultado(null)
+    const valor = modal.acao === 'orcamento' ? Number(String(novoOrc).replace(',', '.')) : undefined
+    const { data, error } = await supabase.functions.invoke('meta-acao', {
+      body: { tipo: modal.tipo, id: modal.id, acao: modal.acao, valor },
+    })
+    setExecutando(false)
+    // erros de negócio vêm no corpo (status != 2xx faz o invoke devolver `error`)
+    let msg = data?.erro
+    if (!data && error) {
+      try { msg = (await error.context?.json?.())?.erro } catch { /* ignora */ }
+      msg = msg || error.message
+    }
+    if (data?.ok) {
+      setOverrides(o => ({
+        ...o,
+        [modal.id]: {
+          ...(o[modal.id] || {}),
+          ...(modal.acao === 'pausar' ? { status: 'PAUSED' } : {}),
+          ...(modal.acao === 'ativar' ? { status: 'ACTIVE' } : {}),
+          ...(modal.acao === 'orcamento' ? { orcamento: valor } : {}),
+        },
+      }))
+      setResultado({ ok: true, texto: 'Feito. A alteração já foi aplicada no Meta.' })
+      setTimeout(() => { setModal(null); setResultado(null) }, 1400)
+    } else {
+      setResultado({ ok: false, texto: msg || 'Não foi possível concluir a ação.' })
+    }
+  }
+
+  function abrirAcao(l, tipo, acao) {
+    setNovoOrc(acao === 'orcamento' ? String(l.orcamento ?? '') : '')
+    setResultado(null)
+    setModal({ tipo, id: l.id, nome: l.nome, acao, orcamento: l.orcamento })
+  }
 
   useEffect(() => {
     if (!dateRange?.[0] || !dateRange?.[1]) return
@@ -77,15 +167,24 @@ export function Campanhas() {
     setDias(null); setFilhos({}); setAbertos({})
     ;(async () => {
       try {
-        const [d, c] = await Promise.all([
+        const [d, c, ld, an] = await Promise.all([
           paginar(() => supabase.from('meta_campanhas_dia').select('*')
             .gte('data', iso(dateRange[0])).lte('data', iso(dateRange[1]))
             .order('data').order('campaign_id')),
           paginar(() => supabase.from('meta_campanhas').select('*').order('campaign_id')),
+          paginar(() => supabase.from('leads')
+            .select('id_lead,nome_cliente,corretor,funnel_status_atual,tags,arquivado,valor_venda,meta_ad_id,data_entrada')
+            .not('meta_ad_id', 'is', null)
+            .gte('data_entrada', `${iso(dateRange[0])}T00:00:00-03:00`)
+            .lte('data_entrada', `${iso(dateRange[1])}T23:59:59-03:00`)
+            .order('data_entrada').order('id_lead')),
+          paginar(() => supabase.from('meta_anuncios').select('ad_id,adset_id,campaign_id').order('ad_id')),
         ])
         if (cancelled) return
         setDias(d)
         setCamps(Object.fromEntries(c.map(x => [x.campaign_id, x])))
+        setLeadsAd(ld)
+        setAnuncios(Object.fromEntries(an.map(x => [x.ad_id, x])))
       } catch (e) { if (!cancelled) setErro(e.message) }
     })()
     return () => { cancelled = true }
@@ -105,7 +204,9 @@ export function Campanhas() {
           paginar(() => supabase.from('meta_conjuntos').select('*').eq('campaign_id', id).order('adset_id')),
         ])
         const ag = agregar(d, 'adset_id')
-        for (const c of cad) if (!ag[c.adset_id] && c.status_efetivo === 'ACTIVE') ag[c.adset_id] = vazio(c.adset_id)
+        for (const c of cad) {
+          if (!ag[c.adset_id] && (c.status_efetivo === 'ACTIVE' || idx.porAdset[c.adset_id])) ag[c.adset_id] = vazio(c.adset_id)
+        }
         const cadMap = Object.fromEntries(cad.map(c => [c.adset_id, c]))
         setFilhos(f => ({ ...f, [chave]: Object.values(ag).map(x => derivar(x, cadMap[x.id])) }))
       } else {
@@ -115,21 +216,39 @@ export function Campanhas() {
           paginar(() => supabase.from('meta_anuncios').select('*').eq('adset_id', id).order('ad_id')),
         ])
         const ag = agregar(d, 'ad_id')
-        for (const c of cad) if (!ag[c.ad_id] && c.status_efetivo === 'ACTIVE') ag[c.ad_id] = vazio(c.ad_id)
+        for (const c of cad) {
+          if (!ag[c.ad_id] && (c.status_efetivo === 'ACTIVE' || idx.porAd[c.ad_id])) ag[c.ad_id] = vazio(c.ad_id)
+        }
         const cadMap = Object.fromEntries(cad.map(c => [c.ad_id, c]))
         setFilhos(f => ({ ...f, [chave]: Object.values(ag).map(x => derivar(x, cadMap[x.id])) }))
       }
     } catch (e) { setErro(e.message) }
   }
 
+  // Leads do C2S ligados a cada campanha / conjunto / anúncio (pelo ad_id do Meta).
+  const idx = useMemo(() => {
+    const porCamp = {}, porAdset = {}, porAd = {}
+    let semLigacao = 0
+    for (const l of leadsAd) {
+      const a = anuncios[l.meta_ad_id]
+      if (!a || a.campaign_id === 'desconhecida') { semLigacao++; continue }
+      ;(porAd[l.meta_ad_id] ||= []).push(l)
+      if (a.adset_id) (porAdset[a.adset_id] ||= []).push(l)
+      ;(porCamp[a.campaign_id] ||= []).push(l)
+    }
+    return { porCamp, porAdset, porAd, semLigacao }
+  }, [leadsAd, anuncios])
+
   const linhas = useMemo(() => {
     if (!dias) return []
     const m = agregar(dias, 'campaign_id')
     for (const c of Object.values(camps)) {
-      if (!m[c.campaign_id] && c.status_efetivo === 'ACTIVE') m[c.campaign_id] = vazio(c.campaign_id)
+      if (!m[c.campaign_id] && (c.status_efetivo === 'ACTIVE' || idx.porCamp[c.campaign_id])) {
+        m[c.campaign_id] = vazio(c.campaign_id)
+      }
     }
     return Object.values(m).map(x => derivar(x, camps[x.id]))
-  }, [dias, camps])
+  }, [dias, camps, idx])
 
   const ordenar = lista => {
     const { col, dir } = ordem
@@ -141,9 +260,10 @@ export function Campanhas() {
   }
 
   const visiveis = useMemo(() => ordenar(linhas.filter(l =>
-    mostrar === 'todas' ? true : mostrar === 'ativas' ? l.status === 'ACTIVE' : l.gasto > 0)),
+    mostrar === 'todas' ? true : mostrar === 'ativas' ? l.status === 'ACTIVE'
+      : (l.gasto > 0 || (idx.porCamp[l.id] || []).length > 0))),
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  [linhas, mostrar, ordem])
+  [linhas, mostrar, ordem, idx])
 
   const ultimaAtualizacao = useMemo(() => {
     const ts = Object.values(camps).map(c => c.atualizado_em).filter(Boolean).sort()
@@ -183,6 +303,11 @@ export function Campanhas() {
     const expansivel = nivel < 2
     const aberto = !!abertos[chave]
     const lista = filhos[chave]
+    const ov = overrides[l.id] || {}
+    const status = ov.status ?? l.status
+    const orcamento = ov.orcamento ?? l.orcamento
+    const tipoApi = nivel === 0 ? 'campanha' : nivel === 1 ? 'conjunto' : 'anuncio'
+    const btn = { background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-secondary)', borderRadius: 4, fontSize: 11, padding: '2px 7px', cursor: 'pointer', marginLeft: 4 }
     return (
       <>
         <tr
@@ -204,10 +329,17 @@ export function Campanhas() {
             )}
             {l.nome}
           </td>
-          <td style={{ textAlign: 'left', color: l.status === 'ACTIVE' ? 'var(--positive)' : 'var(--text-muted)' }}>
-            {STATUS_LABEL[l.status] || l.status}
+          <td style={{ textAlign: 'left', color: status === 'ACTIVE' ? 'var(--positive)' : 'var(--text-muted)' }}>
+            {STATUS_LABEL[status] || status}
           </td>
-          <td>{l.orcamento != null ? formatBRL(l.orcamento) : '—'}</td>
+          <td style={{ whiteSpace: 'nowrap' }}>
+            <Bolinhas
+              leads={(nivel === 0 ? idx.porCamp : nivel === 1 ? idx.porAdset : idx.porAd)[l.id]}
+              titulo={l.nome}
+              onHover={setPopup}
+            />
+          </td>
+          <td>{orcamento != null ? formatBRL(orcamento) : '—'}</td>
           <td style={{ color: 'var(--gold)', fontWeight: 600 }}>{formatBRL(l.gasto)}</td>
           <td>{formatNumber(l.impressoes)}</td>
           <td>{formatNumber(l.cliques)}</td>
@@ -217,12 +349,25 @@ export function Campanhas() {
           <td>{formatNumber(l.leads)}</td>
           <td>{formatNumber(l.conversas)}</td>
           <td>{formatBRL(l.custoResultado)}</td>
+          {isAdmin && (
+            <td style={{ whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
+              {status === 'ACTIVE' && (
+                <button style={btn} title="Pausar no Meta" onClick={() => abrirAcao({ ...l, orcamento }, tipoApi, 'pausar')}>⏸ Pausar</button>
+              )}
+              {status === 'PAUSED' && (
+                <button style={{ ...btn, color: 'var(--positive)' }} title="Ativar no Meta" onClick={() => abrirAcao({ ...l, orcamento }, tipoApi, 'ativar')}>▶ Ativar</button>
+              )}
+              {orcamento != null && (
+                <button style={btn} title="Alterar orçamento diário" onClick={() => abrirAcao({ ...l, orcamento }, tipoApi, 'orcamento')}>R$</button>
+              )}
+            </td>
+          )}
         </tr>
         {aberto && !lista && (
-          <tr><td colSpan={12} style={{ padding: '6px 8px', paddingLeft: 30 + nivel * 22, color: 'var(--text-muted)' }}>Carregando...</td></tr>
+          <tr><td colSpan={ncol} style={{ padding: '6px 8px', paddingLeft: 30 + nivel * 22, color: 'var(--text-muted)' }}>Carregando...</td></tr>
         )}
         {aberto && lista && lista.length === 0 && (
-          <tr><td colSpan={12} style={{ padding: '6px 8px', paddingLeft: 30 + nivel * 22, color: 'var(--text-muted)' }}>
+          <tr><td colSpan={ncol} style={{ padding: '6px 8px', paddingLeft: 30 + nivel * 22, color: 'var(--text-muted)' }}>
             Sem dados neste período.
           </td></tr>
         )}
@@ -233,11 +378,100 @@ export function Campanhas() {
     )
   }
 
+  const popupEl = popup && (
+    <div style={{
+      position: 'fixed', left: Math.min(popup.x + 14, window.innerWidth - 330), top: Math.max(popup.y - 10, 8),
+      width: 310, zIndex: 999, pointerEvents: 'none', background: 'var(--surface)',
+      border: `1px solid ${BOLA[popup.tipo].cor}`, borderRadius: 'var(--radius)', padding: '10px 12px',
+      fontSize: 11, color: 'var(--text-primary)', boxShadow: '0 6px 20px rgba(0,0,0,0.5)',
+    }}>
+      <div style={{ color: BOLA[popup.tipo].cor, fontWeight: 700, marginBottom: 2 }}>
+        {popup.leads.length} {BOLA[popup.tipo].rotulo.toLowerCase()}{popup.leads.length > 1 && popup.tipo === 'fechado' ? 's' : ''}
+      </div>
+      <div style={{ color: 'var(--text-muted)', marginBottom: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        {popup.titulo}
+      </div>
+      {popup.leads.slice(0, 10).map(l => (
+        <div key={l.id_lead} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '1px 0' }}>
+          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.nome_cliente || '(sem nome)'}</span>
+          <span style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+            {(l.corretor || '').split(' ')[0]}
+            {popup.tipo === 'fechado' && l.valor_venda ? ` · ${formatBRL(l.valor_venda, { compact: true })}` : ''}
+          </span>
+        </div>
+      ))}
+      {popup.leads.length > 10 && (
+        <div style={{ color: 'var(--text-muted)', marginTop: 4 }}>+ {popup.leads.length - 10} outros</div>
+      )}
+    </div>
+  )
+
+  const TIPO_TXT = { campanha: 'a campanha', conjunto: 'o conjunto', anuncio: 'o anúncio' }
+  const orcNum = Number(String(novoOrc).replace(',', '.'))
+  const variacaoOrc = modal?.acao === 'orcamento' && modal.orcamento > 0 && isFinite(orcNum)
+    ? (orcNum - modal.orcamento) / modal.orcamento : null
+  const orcBloqueado = modal?.acao === 'orcamento' && (!isFinite(orcNum) || orcNum < 5 || (variacaoOrc != null && variacaoOrc > 0.5))
+
+  const modalEl = modal && (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onClick={() => !executando && setModal(null)}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: 420, maxWidth: '92vw', background: 'var(--surface)', border: '1px solid var(--border)',
+        borderRadius: 'var(--radius)', padding: 20, color: 'var(--text-primary)', fontSize: 13,
+      }}>
+        <div style={{ fontWeight: 700, color: 'var(--gold)', marginBottom: 8 }}>
+          {modal.acao === 'pausar' ? 'Pausar' : modal.acao === 'ativar' ? 'Ativar' : 'Alterar orçamento'} — confirmar
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          {modal.acao === 'orcamento'
+            ? <>Orçamento diário d{TIPO_TXT[modal.tipo]} <strong>{modal.nome}</strong>:</>
+            : <>Você vai {modal.acao === 'pausar' ? 'pausar' : 'ativar'} {TIPO_TXT[modal.tipo]} <strong>{modal.nome}</strong> direto no Meta.</>}
+        </div>
+
+        {modal.acao === 'orcamento' && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ color: 'var(--text-muted)', marginBottom: 6 }}>Atual: {formatBRL(modal.orcamento)}</div>
+            <input autoFocus value={novoOrc} onChange={e => setNovoOrc(e.target.value)} inputMode="decimal"
+              style={{ width: '100%', background: 'var(--bg-deep)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 4, padding: '8px 10px', fontSize: 14 }} />
+            {variacaoOrc != null && (
+              <div style={{ marginTop: 6, fontSize: 12, color: variacaoOrc > 0.5 ? 'var(--negative)' : 'var(--text-secondary)' }}>
+                {variacaoOrc >= 0 ? '▲' : '▼'} {Math.abs(variacaoOrc * 100).toFixed(0)}% em relação ao atual
+                {variacaoOrc > 0.5 && ' — aumento acima de 50% de uma vez é bloqueado; faça em etapas.'}
+              </div>
+            )}
+          </div>
+        )}
+
+        {resultado && (
+          <div style={{ marginBottom: 12, padding: '8px 10px', borderRadius: 4, fontSize: 12,
+            border: `1px solid ${resultado.ok ? 'var(--positive)' : 'var(--negative)'}`,
+            color: resultado.ok ? 'var(--positive)' : 'var(--negative)' }}>
+            {resultado.texto}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button disabled={executando} onClick={() => setModal(null)}
+            style={{ background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-secondary)', borderRadius: 4, padding: '6px 14px', cursor: 'pointer' }}>
+            Cancelar
+          </button>
+          <button disabled={executando || orcBloqueado || resultado?.ok} onClick={executar}
+            style={{ background: 'var(--gold)', border: 'none', color: '#0a1f1a', fontWeight: 700, borderRadius: 4, padding: '6px 16px',
+              cursor: executando || orcBloqueado ? 'default' : 'pointer', opacity: executando || orcBloqueado ? 0.5 : 1 }}>
+            {executando ? 'Aplicando...' : 'Confirmar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+
   if (erro) return <div style={{ color: 'var(--negative)' }}>Erro ao carregar campanhas: {erro}</div>
   const carregando = dias === null
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap)' }}>
+      {popupEl}
+      {modalEl}
       <div className="tile-grid-5">
         <KPICard title="GASTO NO PERÍODO" value={formatBRL(tot.gasto)} loading={carregando}
           tooltip="Soma das campanhas, direto do Gerenciador de Anúncios" />
@@ -287,6 +521,10 @@ export function Campanhas() {
           cpc: l.cpc != null ? l.cpc.toFixed(2) : '', cpm: l.cpm != null ? l.cpm.toFixed(2) : '',
           leads_formulario: l.leads, conversas_iniciadas: l.conversas,
           custo_por_resultado: l.custoResultado != null ? l.custoResultado.toFixed(2) : '',
+          leads_c2s: (idx.porCamp[l.id] || []).length,
+          c2s_fechados: (idx.porCamp[l.id] || []).filter(x => classe(x) === 'fechado').length,
+          c2s_potenciais: (idx.porCamp[l.id] || []).filter(x => classe(x) === 'potencial').length,
+          c2s_arquivados: (idx.porCamp[l.id] || []).filter(x => classe(x) === 'arquivado').length,
         }))} />
 
         <div style={{ overflow: 'auto' }}>
@@ -295,6 +533,9 @@ export function Campanhas() {
               <tr style={{ color: 'var(--text-muted)' }}>
                 <th style={{ ...th, textAlign: 'left' }} onClick={() => ordenarPor('nome')}>Nome{seta('nome')}</th>
                 <th style={{ ...th, textAlign: 'left' }} onClick={() => ordenarPor('status')}>Status{seta('status')}</th>
+                <th style={{ ...th, cursor: 'default' }} title="Leads do C2S que vieram deste item (entraram no período). Verde = fechado · Amarelo = potencial · Vermelho = arquivado/perdido. Passe o mouse na bolinha.">
+                  Leads C2S ⓘ
+                </th>
                 <th style={th} onClick={() => ordenarPor('orcamento')}>Orç./dia{seta('orcamento')}</th>
                 <th style={th} onClick={() => ordenarPor('gasto')}>Gasto{seta('gasto')}</th>
                 <th style={th} onClick={() => ordenarPor('impressoes')}>Impressões{seta('impressoes')}</th>
@@ -305,18 +546,32 @@ export function Campanhas() {
                 <th style={th} onClick={() => ordenarPor('leads')}>Leads{seta('leads')}</th>
                 <th style={th} onClick={() => ordenarPor('conversas')}>Conversas{seta('conversas')}</th>
                 <th style={th} onClick={() => ordenarPor('custoResultado')}>Custo/result.{seta('custoResultado')}</th>
+                {isAdmin && <th style={{ ...th, cursor: 'default' }}>Ações</th>}
               </tr>
             </thead>
             <tbody>
-              {carregando && <tr><td colSpan={12} style={{ padding: 12 }}>Carregando...</td></tr>}
+              {carregando && <tr><td colSpan={ncol} style={{ padding: 12 }}>Carregando...</td></tr>}
               {!carregando && visiveis.length === 0 && (
-                <tr><td colSpan={12} style={{ padding: 12, color: 'var(--text-muted)' }}>Nenhuma campanha para este filtro e período.</td></tr>
+                <tr><td colSpan={ncol} style={{ padding: 12, color: 'var(--text-muted)' }}>Nenhuma campanha para este filtro e período.</td></tr>
               )}
               {visiveis.map(l => <Linha key={l.id} l={l} nivel={0} />)}
             </tbody>
           </table>
         </div>
-        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 8 }}>
+        <div style={{ display: 'flex', gap: 14, alignItems: 'center', fontSize: 11, color: 'var(--text-secondary)', marginTop: 10, flexWrap: 'wrap' }}>
+          <span>Leads do C2S por item (entraram no período):</span>
+          {Object.entries(BOLA).map(([k, b]) => (
+            <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ width: 10, height: 10, borderRadius: '50%', background: b.cor, display: 'inline-block' }} />
+              {b.rotulo}
+            </span>
+          ))}
+          <span style={{ color: 'var(--text-muted)' }}>
+            {idx.semLigacao > 0 && `· ${formatNumber(idx.semLigacao)} lead(s) do período sem anúncio identificado (anúncio removido ou orgânico)`}
+          </span>
+        </div>
+        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 6 }}>
+          Para ver negócios fechados de leads mais antigos, amplie o período (ex.: Últimos 6 meses ou Este ano).
           Orçamento/dia aparece onde está definido (campanha CBO ou conjunto); fora disso mostra "—".
           Anúncios e conjuntos só aparecem com dados a partir de 01/09/2026. Alcance somado entre dias pode repetir pessoas.
         </div>
